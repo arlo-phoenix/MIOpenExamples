@@ -217,7 +217,7 @@ struct Device {
   void print_info() {
     // print out device info
     INFO("Device " << hip_id << ": " << hip_props.name);
-    INFO("\tArch:\t" << hip_props.gcnArch)
+    INFO("\tArch:\t" << hip_props.gcnArchName)
     INFO("\tGMem:\t" << hip_props.totalGlobalMem / 1024 / 1024 << " MiB");
     INFO("\twarps:\t" << hip_props.warpSize);
     INFO("\tCUs:\t" << hip_props.multiProcessorCount);
@@ -314,6 +314,16 @@ const char *mio_err[] = {"StatusSuccess        ", "StatusNotInitialized ",
       exit(EXIT_FAILURE);                                                      \
     }                                                                          \
   }
+
+#define ERR_FAIL_COND(cond, message)                                           \
+  {                                                                            \
+    if (cond) {                                                                \
+      fprintf(stderr, "error: '%s' at %s:%d\n", message,                       \
+              __FILE__, __LINE__);                                             \
+      exit(EXIT_FAILURE);                                                      \
+    }                                                                          \
+  }
+
 
 // get miopenHandle globally via `mio::handle()`
 struct mio {

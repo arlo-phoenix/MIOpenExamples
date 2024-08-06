@@ -91,6 +91,7 @@ struct TensorDesc : public Dim {
   TensorDesc() : Dim(0, 0, 0, 0) {}
 
   TensorDesc(int n, int c, int h, int w) : Dim(n, c, h, w) {
+    ERR_FAIL_COND(w==0, "Tensor can't be empty.");
     CHECK_MIO(miopenCreateTensorDescriptor(&desc));
     CHECK_MIO(miopenSet4dTensorDescriptor(desc, miopenFloat, n, c, h, w));
   }
@@ -174,13 +175,13 @@ struct Tensor : public TensorDesc {
 
   std::vector<float> toHost() {
     std::vector<float> x(data_size / sizeof(float));
-    hipMemcpyDtoH(&x[0], data, data_size);
+    CHECK_HIP(hipMemcpyDtoH(&x[0], data, data_size));
     return x;
   }
 
   void fromHost(const std::vector<float> &h) {
-    hipMemcpyHtoD(data, (void *)h.data(), data_size);
-    hipDeviceSynchronize();
+    CHECK_HIP(hipMemcpyHtoD(data, (void *)h.data(), data_size));
+    CHECK_HIP(hipDeviceSynchronize());
   }
 
   void print_data() {
@@ -204,6 +205,15 @@ struct Tensor : public TensorDesc {
     }
   }
 
+  void print_raw() {
+    std::vector<float> hostTensor = toHost();
+    for (int i = 0; i < hostTensor.size(); i++)
+    {
+      std::cout<<hostTensor[i]<<" ";
+    }
+    std::cout<<"\n";
+  }
+
   void alloc() {
     DEBUG("Allocating Float Tensor (" << n << "," << c << "," << h << "," << h
                                       << "), total size: " << data_size / 1024
@@ -215,7 +225,7 @@ struct Tensor : public TensorDesc {
   void uniform() {
     std::vector<float> h(data_size / sizeof(float));
     std::generate(h.begin(), h.end(), []() { return rand() * 1.f / RAND_MAX; });
-    hipMemcpyHtoD(data, h.data(), data_size);
+    CHECK_HIP(hipMemcpyHtoD(data, h.data(), data_size));
   }
 
   Tensor(TensorDesc &&d)

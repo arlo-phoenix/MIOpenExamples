@@ -6,11 +6,12 @@ int main(int argc, char *argv[]) {
   device_init();
   miopenEnableProfiling(mio::handle(), true);
 
+  if(argc>1)
+    srand(std::stoi(argv[1]));
+
   Tensor input(16, 128, 16,
                16); // batch size = 16, input channels = 3, image size = 16 x 16
-  Tensor output;
   Tensor weights(1, 128, 3, 3); // kernel size = 3 x 3
-  Tensor bias;
   miopenConvolutionDescriptor_t conv_desc;
 
   // initialize tensor
@@ -31,8 +32,8 @@ int main(int argc, char *argv[]) {
   int n, c, h, w;
   miopenGetConvolutionForwardOutputDim(conv_desc, input.desc, weights.desc, &n,
                                        &c, &h, &w);
-  output = Tensor(n, c, h, w);
-  bias = Tensor(1, c, 1, 1);
+  Tensor output = Tensor(n, c, h, w);
+  Tensor bias = Tensor(1, c, 1, 1);
   // Create the fusion plan
   miopenCreateFusionPlan(&fusePlanDesc, miopenVerticalFusion, input.desc);
   miopenCreateOperatorArgs(&fusionArgs);
@@ -57,35 +58,17 @@ int main(int argc, char *argv[]) {
                               activ_beta, activ_gamma);
   miopenSetOpArgsBiasForward(fusionArgs, biasOp, &alpha, &beta, bias.data);
 
-  miopenExecuteFusionPlan(mio::handle(), fusePlanDesc, input.desc, input.data,
-                          output.desc, output.data, fusionArgs);
+  // run plan
+  CHECK_MIO(miopenExecuteFusionPlan(mio::handle(), fusePlanDesc, input.desc, input.data,
+                          output.desc, output.data, fusionArgs));
 
-  // The same fusion plan may be reused with new arguments without a re-compile
-  Tensor input2(
-      16, 128, 16,
-      16); // batch size = 16, input channels = 3, image size = 16 x 16
-  Tensor output2(n, c, h, w);
-  Tensor weights2(1, 128, 3, 3); // kernel size = 3 x 3
-  Tensor bias2(1, c, 1, 1);
-
-  input2.uniform();
-  weights2.uniform();
-
-  // possibly in a loop but with new values for the tensors to be meaningful
-  // Here we use the same values to keep the code simple
-  for (auto idx = 0; idx < 1; idx++) {
-    miopenSetOpArgsConvForward(fusionArgs, convoOp, &alpha, &beta,
-                               weights2.data);
-    miopenSetOpArgsActivForward(fusionArgs, activOp, &alpha, &beta, activ_alpha,
-                                activ_beta, activ_gamma);
-    miopenSetOpArgsBiasForward(fusionArgs, biasOp, &alpha, &beta, bias2.data);
-
-    miopenExecuteFusionPlan(mio::handle(), fusePlanDesc, input2.desc,
-                            input2.data, output2.desc, output2.data,
-                            fusionArgs);
-  }
-
+  // You can reuse the same plan
+  CHECK_MIO(miopenExecuteFusionPlan(mio::handle(), fusePlanDesc, input.desc, input.data,
+                          output.desc, output.data, fusionArgs)); 
   // Cleanup
-  miopenDestroyFusionPlan(fusePlanDesc);
-  miopenDestroyConvolutionDescriptor(conv_desc);
+  CHECK_MIO(miopenDestroyFusionPlan(fusePlanDesc));
+  CHECK_MIO(miopenDestroyConvolutionDescriptor(conv_desc));
+  
+  // getting back the result
+  std::vector<float> hostTensor = output.toHost();
 }
